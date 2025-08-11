@@ -4,12 +4,13 @@
   "description": "A simple story chain bot",
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@google/genai": "^1.13.0",
     "dotenv": "^17.2.1",
     "node-telegram-bot-api": "^0.66.0"
   }

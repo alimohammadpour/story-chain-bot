@@ -1,6 +1,7 @@
-require('dotenv').config();
-const TelegramBot = require('node-telegram-bot-api');
-const promptsData = require('./prompts.json');
+import dotenv from 'dotenv';
+dotenv.config();
+import TelegramBot from 'node-telegram-bot-api';
+import { getStartingResponse, getTwistResponse } from './googleGenAIHandler.js';
 
 const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
@@ -13,41 +14,37 @@ bot.setMyCommands([
 
 const stories = {};
 
-function randomFromArray(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-bot.onText(/\/start/, (msg) => {
+bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
   if (stories[chatId]?.active) {
-    return bot.sendMessage(chatId, "📖 A story is already in progress. Use /end to finish it.");
+    return await bot.sendMessage(chatId, "📖 A story is already in progress. Use /end to finish it.");
   }
 
-  const prompt = randomFromArray(promptsData.prompts);
+  const startingLine = await getStartingResponse();
   stories[chatId] = {
     active: true,
-    text: [prompt],
+    text: [startingLine],
     lastAuthorId: null,
     repeatCount: 0
   };
 
-  bot.sendMessage(chatId, `📖 New story started!\n\n${prompt}`);
-  bot.sendMessage(chatId, "Add your next line to continue the story. Use the /add command followrd by your desired plot! Keep it short!");
+  await bot.sendMessage(chatId, `📖 New story started!\n\n${startingLine}`);
+  await bot.sendMessage(chatId, "Add your next line to continue the story. Use the /add command followrd by your desired plot! Keep it short!");
 });
 
-bot.onText(/\/add (.+)/, (msg, match) => {
+bot.onText(/\/add (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const storyLine = match[1].trim();
 
   const MAX_WORDS = 20;
   if (storyLine.split(/\s+/).length > MAX_WORDS) {
-    return bot.sendMessage(chatId, `${msg.from.first_name}, your message is too long. Please limit it to ${MAX_WORDS} words.`);
+    return await bot.sendMessage(chatId, `${msg.from.first_name}, your message is too long. Please limit it to ${MAX_WORDS} words.`);
   }
 
   if (!stories[chatId]?.active) {
-    return bot.sendMessage(chatId, "There's no active story. Use /start to begin a new one.");
+    return await bot.sendMessage(chatId, "There's no active story. Use /start to begin a new one.");
   }
 
   const story = stories[chatId];
@@ -55,8 +52,7 @@ bot.onText(/\/add (.+)/, (msg, match) => {
     story.repeatCount += 1;
 
     if (story.repeatCount > 2) {
-      bot.sendMessage(chatId, `Hey ${msg.from.first_name}, you've already added two plots. Wait for someone else or use /twist.`);
-      return;
+      return await bot.sendMessage(chatId, `Hey ${msg.from.first_name}, you've already added two plots. Wait for someone else or use /twist.`);
     }
   } else {
     story.lastAuthorId = userId;
@@ -66,31 +62,29 @@ bot.onText(/\/add (.+)/, (msg, match) => {
   story.text.push(storyLine);
 });
 
-bot.onText(/\/twist/, (msg) => {
+bot.onText(/\/twist/, async (msg) => {
   const chatId = msg.chat.id;
 
   if (!stories[chatId]?.active) {
-    return bot.sendMessage(chatId, "No story is currently in progress. Use /start to begin.");
+    return await bot.sendMessage(chatId, "No story is currently in progress. Use /start to begin.");
   }
 
-  const twist = randomFromArray(promptsData.twists);
+  const twist = await getTwistResponse(stories[chatId].text.join(' '));
   stories[chatId].text.push(twist);
 
   stories[chatId].lastAuthorId = msg.from.id;
   stories[chatId].repeatCount = 0;
 
-  bot.sendMessage(chatId, `Plot twist: ${twist}`);
+  await bot.sendMessage(chatId, `Plot twist: ${twist}`);
 });
 
-bot.onText(/\/end/, (msg) => {
-  const chatId = msg.chat.id;
-
-  if (!stories[chatId]?.active) {
-    return bot.sendMessage(chatId, "No story is currently in progress.");
+bot.onText(/\/end/, async ({ chat: { id } }) => {
+  if (!stories[id]?.active) {
+    return await bot.sendMessage(id, "No story is currently in progress.");
   }
 
-  const fullStory = stories[chatId].text.join(" ");
-  stories[chatId].active = false;
+  const fullStory = stories[id].text.join(" ");
+  stories[id].active = false;
 
-  bot.sendMessage(chatId, `📚 Here's your complete story:\n\n${fullStory}`);
+  await bot.sendMessage(id, `📚 Here's your complete story:\n\n${fullStory}`);
 });
